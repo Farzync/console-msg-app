@@ -5,7 +5,7 @@ import * as crypto from "crypto";
 import * as readline from "readline";
 
 interface Message {
-  type: "message" | "join" | "leave" | "publicKey";
+  type: "message" | "join" | "leave" | "publicKey" | "auth" | "authResult";
   sender: string;
   content: string;
   iv?: string;
@@ -20,6 +20,7 @@ class SecureMessagingClient {
   private keyPair: { publicKey: string; privateKey: crypto.KeyObject };
   private sharedSecret: Buffer | null = null;
   private buffer: string = "";
+  private authenticated: boolean = false;
 
   constructor() {
     // Create readline interface for user input
@@ -73,40 +74,37 @@ class SecureMessagingClient {
 
   private cleanupAndExit(): void {
     if (this.socket) {
-      // Pastikan socket ditutup
+      // Make sure socket is closed
       this.socket.destroy();
       this.socket = null;
     }
-    // Tutup readline dan keluar
+    // Close readline and exit
     this.rl.close();
     process.exit(0);
   }
 
   private connect(ipAddress: string, port: number): Promise<void> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       this.socket = net.createConnection({ host: ipAddress, port }, () => {
         console.log(`Connected to ${ipAddress}:${port}`);
 
         // Send username and public key to the server
         this.sendPublicKey();
 
-        // Start listening for user input
-        this.listenForUserInput();
-
         resolve();
       });
 
-      // 1) Tangani error koneksi (termasuk server mati mendadak)
+      // 1) Handle connection errors (including server sudden death)
       this.socket.on("error", (err) => {
         if ((err as NodeJS.ErrnoException).code === "ECONNRESET") {
           console.warn("Server disconnected abruptly.");
         } else {
           console.error("Connection error:", err);
         }
-        this.cleanupAndExit(); // tutup rl & exit
+        this.cleanupAndExit(); // close rl & exit
       });
 
-      // 2) Tangani close normal
+      // 2) Handle normal close
       this.socket.on("close", () => {
         console.log("Connection closed by server");
         this.cleanupAndExit();
@@ -127,20 +125,11 @@ class SecureMessagingClient {
           } catch (error) {
             console.error("Error processing message:", error);
             // Redisplay the prompt
-            process.stdout.write("#> ");
+            if (this.authenticated) {
+              process.stdout.write("#> ");
+            }
           }
         }
-      });
-
-      this.socket.on("error", (err) => {
-        console.error("Connection error:", err);
-        reject(err);
-      });
-
-      this.socket.on("close", () => {
-        console.log("Connection closed");
-        this.rl.close();
-        process.exit(0);
       });
     });
   }
@@ -163,6 +152,28 @@ class SecureMessagingClient {
       // Received the encrypted AES key from server
       this.handleKeyExchange(message.content);
       return;
+    }
+
+    if (message.type === "authResult") {
+      if (message.content === "password_required") {
+        // Server requires a password
+        this.promptForPassword();
+        return;
+      } else if (message.content === "authenticated") {
+        // Authentication successful
+        this.authenticated = true;
+        console.log("Authentication successful. You've joined the chat.");
+        // Start listening for user input now that we're authenticated
+        this.listenForUserInput();
+        // Display the prompt for the first message
+        process.stdout.write("#> ");
+        return;
+      } else if (message.content === "authentication_failed") {
+        // Authentication failed
+        console.error("Authentication failed. Incorrect password.");
+        console.log("Connection will be closed.");
+        return;
+      }
     }
 
     // For regular messages, decrypt if needed
@@ -191,11 +202,15 @@ class SecureMessagingClient {
         );
 
         // Redisplay the prompt
-        process.stdout.write("#> ");
+        if (this.authenticated) {
+          process.stdout.write("#> ");
+        }
       } catch (error) {
         console.error("Error decrypting message:", error);
         // Redisplay the prompt
-        process.stdout.write("#> ");
+        if (this.authenticated) {
+          process.stdout.write("#> ");
+        }
       }
     } else {
       // For system messages (join/leave)
@@ -208,8 +223,39 @@ class SecureMessagingClient {
       );
 
       // Redisplay the prompt
-      process.stdout.write("#> ");
+      if (this.authenticated) {
+        process.stdout.write("#> ");
+      }
     }
+  }
+
+  private promptForPassword(): void {
+    this.rl.question("Server password: ", (password) => {
+      if (!this.sharedSecret || !this.socket) {
+        console.error("Secure connection not established");
+        this.cleanupAndExit();
+        return;
+      }
+
+      try {
+        // Encrypt the password
+        const { encrypted, iv, authTag } = this.encryptMessage(password);
+
+        const authMessage: Message = {
+          type: "auth",
+          sender: this.username,
+          content: encrypted,
+          iv,
+          authTag,
+          timestamp: this.getTimestamp(),
+        };
+
+        this.socket.write(JSON.stringify(authMessage) + "\n");
+      } catch (error) {
+        console.error("Error sending password:", error);
+        this.cleanupAndExit();
+      }
+    });
   }
 
   private handleKeyExchange(encryptedKeyBase64: string): void {
@@ -225,9 +271,6 @@ class SecureMessagingClient {
       this.sharedSecret = decryptedKey;
 
       console.log("Secure connection established with end-to-end encryption");
-
-      // Show the input prompt after connection is established
-      process.stdout.write("#> ");
     } catch (error) {
       console.error("Error during key exchange:", error);
     }
@@ -292,7 +335,7 @@ class SecureMessagingClient {
   }
 
   private sendMessage(content: string): void {
-    if (!this.socket || !this.sharedSecret) return;
+    if (!this.socket || !this.sharedSecret || !this.authenticated) return;
 
     try {
       // Encrypt the message content
@@ -330,7 +373,4 @@ class SecureMessagingClient {
 if (require.main === module) {
   const client = new SecureMessagingClient();
   client.start();
-}
-function reject(err: Error) {
-  throw new Error("Function not implemented.");
 }
