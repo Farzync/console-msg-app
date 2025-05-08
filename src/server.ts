@@ -3,6 +3,7 @@
 import * as net from "net";
 import * as crypto from "crypto";
 import { randomBytes } from "crypto";
+import * as readline from "readline";
 
 interface Client {
   socket: net.Socket;
@@ -10,21 +11,24 @@ interface Client {
   publicKey: string;
   sharedSecret?: Buffer;
   disconnected?: boolean;
+  authenticated: boolean;
 }
 
 interface Message {
-  type: "message" | "join" | "leave" | "publicKey";
+  type: "message" | "join" | "leave" | "publicKey" | "auth" | "authResult";
   sender: string;
   content: string;
   iv?: string;
   authTag?: string;
   timestamp: string;
+  password?: string;
 }
 
 class SecureMessagingServer {
   private server: net.Server;
   private clients: Map<string, Client> = new Map();
   private serverKeyPair: { publicKey: string; privateKey: crypto.KeyObject };
+  private serverPassword: string | null = null;
 
   constructor(private port: number) {
     // Generate server's key pair for key exchange
@@ -48,9 +52,40 @@ class SecureMessagingServer {
     this.server = net.createServer(this.handleConnection.bind(this));
   }
 
-  public start(): void {
+  public async start(): Promise<void> {
+    // Ask if password protection is desired
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+
+    const enablePassword = await this.prompt(
+      rl,
+      "Enable password protection? (y/n): "
+    );
+
+    if (enablePassword.toLowerCase() === "y") {
+      this.serverPassword = await this.prompt(rl, "Set server password: ");
+      console.log("Password protection enabled");
+    } else {
+      console.log("Password protection disabled");
+    }
+
+    rl.close();
+
     this.server.listen(this.port, () => {
       console.log(`Secure messaging server started on port ${this.port}`);
+      if (this.serverPassword) {
+        console.log("Password protection is enabled");
+      }
+    });
+  }
+
+  private prompt(rl: readline.Interface, question: string): Promise<string> {
+    return new Promise((resolve) => {
+      rl.question(question, (answer) => {
+        resolve(answer.trim());
+      });
     });
   }
 
@@ -80,22 +115,58 @@ class SecureMessagingServer {
               socket,
               username: message.sender,
               publicKey: message.content,
+              authenticated: false, // Not authenticated yet
             };
 
             // Generate shared secret using client's public key
             this.setupSecureConnection(client);
 
+            // Store client temporarily without broadcasting join
             this.clients.set(message.sender, client);
-            this.broadcastMessage({
-              type: "join",
-              sender: "Server",
-              content: `${message.sender} has joined the chat`,
-              timestamp: this.getTimestamp(),
-            });
-            console.log(`${message.sender} has joined the chat`);
+
+            // If password is set, request authentication
+            if (this.serverPassword) {
+              this.requestAuthentication(client);
+            } else {
+              // No password required
+              client.authenticated = true;
+              this.confirmAuthentication(client, true);
+              this.announceClientJoined(client);
+            }
+          }
+          // Handle authentication message
+          else if (message.type === "auth" && client && !client.authenticated) {
+            // Decrypt the password using the shared secret
+            const password = this.decryptMessage(
+              message.content,
+              message.iv || "",
+              message.authTag || "",
+              client.sharedSecret as Buffer
+            );
+
+            // Check if password is correct
+            const isAuthenticated = password === this.serverPassword;
+            client.authenticated = isAuthenticated;
+
+            // Send authentication result
+            this.confirmAuthentication(client, isAuthenticated);
+
+            if (isAuthenticated) {
+              // Announce client joined only if authenticated
+              this.announceClientJoined(client);
+            } else {
+              // Disconnect unauthenticated client
+              setTimeout(() => {
+                socket.end();
+              }, 1000); // Give time for the message to be sent
+            }
           }
           // Handle regular messages
-          else if (message.type === "message" && client) {
+          else if (
+            message.type === "message" &&
+            client &&
+            client.authenticated
+          ) {
             if (message.content === "/leave") {
               this.handleClientDisconnect(client);
               socket.end();
@@ -144,6 +215,41 @@ class SecureMessagingServer {
       if (client) {
         this.handleClientDisconnect(client);
       }
+    });
+  }
+
+  private requestAuthentication(client: Client): void {
+    const authReqMsg: Message = {
+      type: "authResult",
+      sender: "Server",
+      content: "password_required",
+      timestamp: this.getTimestamp(),
+    };
+
+    client.socket.write(JSON.stringify(authReqMsg) + "\n");
+  }
+
+  private confirmAuthentication(client: Client, success: boolean): void {
+    const result = success ? "authenticated" : "authentication_failed";
+
+    const authResultMsg: Message = {
+      type: "authResult",
+      sender: "Server",
+      content: result,
+      timestamp: this.getTimestamp(),
+    };
+
+    client.socket.write(JSON.stringify(authResultMsg) + "\n");
+  }
+
+  private announceClientJoined(client: Client): void {
+    console.log(`${client.username} has joined the chat`);
+
+    this.broadcastMessage({
+      type: "join",
+      sender: "Server",
+      content: `${client.username} has joined the chat`,
+      timestamp: this.getTimestamp(),
     });
   }
 
@@ -209,7 +315,8 @@ class SecureMessagingServer {
   private broadcastMessage(message: Message): void {
     // For each client, encrypt the message with their individual shared secret
     this.clients.forEach((client) => {
-      if (client.sharedSecret) {
+      // Only send to authenticated clients
+      if (client.sharedSecret && client.authenticated) {
         // Only for message types that need to be encrypted
         if (message.type === "message") {
           const { encrypted, iv, authTag } = this.encryptMessage(
@@ -232,18 +339,21 @@ class SecureMessagingServer {
   }
 
   private handleClientDisconnect(client: Client): void {
-    if (client.disconnected) return; // Sudah disconnect? skip.
-    client.disconnected = true; // Tandai sebagai sudah disconnect
+    if (client.disconnected) return; // Already disconnected? skip.
+    client.disconnected = true; // Mark as disconnected
 
     console.log(`${client.username} has left the chat`);
     this.clients.delete(client.username);
 
-    this.broadcastMessage({
-      type: "leave",
-      sender: "Server",
-      content: `${client.username} has left the chat`,
-      timestamp: this.getTimestamp(),
-    });
+    // Only broadcast leave message if client was authenticated
+    if (client.authenticated) {
+      this.broadcastMessage({
+        type: "leave",
+        sender: "Server",
+        content: `${client.username} has left the chat`,
+        timestamp: this.getTimestamp(),
+      });
+    }
   }
 
   private getTimestamp(): string {
