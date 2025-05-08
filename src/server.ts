@@ -9,6 +9,7 @@ interface Client {
   username: string;
   publicKey: string;
   sharedSecret?: Buffer;
+  disconnected?: boolean;
 }
 
 interface Message {
@@ -126,7 +127,14 @@ class SecureMessagingServer {
     });
 
     socket.on("error", (err) => {
-      console.error("Socket error:", err);
+      if ((err as NodeJS.ErrnoException).code === "ECONNRESET") {
+        console.warn(
+          `Client ${client?.username || "<unknown>"} disconnected abruptly.`
+        );
+      } else {
+        console.error("Socket error:", err);
+      }
+
       if (client) {
         this.handleClientDisconnect(client);
       }
@@ -224,6 +232,9 @@ class SecureMessagingServer {
   }
 
   private handleClientDisconnect(client: Client): void {
+    if (client.disconnected) return; // Sudah disconnect? skip.
+    client.disconnected = true; // Tandai sebagai sudah disconnect
+
     console.log(`${client.username} has left the chat`);
     this.clients.delete(client.username);
 
