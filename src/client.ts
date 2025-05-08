@@ -71,8 +71,19 @@ class SecureMessagingClient {
     });
   }
 
+  private cleanupAndExit(): void {
+    if (this.socket) {
+      // Pastikan socket ditutup
+      this.socket.destroy();
+      this.socket = null;
+    }
+    // Tutup readline dan keluar
+    this.rl.close();
+    process.exit(0);
+  }
+
   private connect(ipAddress: string, port: number): Promise<void> {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       this.socket = net.createConnection({ host: ipAddress, port }, () => {
         console.log(`Connected to ${ipAddress}:${port}`);
 
@@ -83,6 +94,22 @@ class SecureMessagingClient {
         this.listenForUserInput();
 
         resolve();
+      });
+
+      // 1) Tangani error koneksi (termasuk server mati mendadak)
+      this.socket.on("error", (err) => {
+        if ((err as NodeJS.ErrnoException).code === "ECONNRESET") {
+          console.warn("Server disconnected abruptly.");
+        } else {
+          console.error("Connection error:", err);
+        }
+        this.cleanupAndExit(); // tutup rl & exit
+      });
+
+      // 2) Tangani close normal
+      this.socket.on("close", () => {
+        console.log("Connection closed by server");
+        this.cleanupAndExit();
       });
 
       this.socket.on("data", (data) => {
@@ -303,4 +330,7 @@ class SecureMessagingClient {
 if (require.main === module) {
   const client = new SecureMessagingClient();
   client.start();
+}
+function reject(err: Error) {
+  throw new Error("Function not implemented.");
 }
