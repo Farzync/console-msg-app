@@ -1,0 +1,31 @@
+{
+  "name": "secure-messaging-app",
+  "version": "1.0.0",
+  "description": "Secure console messaging application with end-to-end encryption",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "start:server": "node dist/server.js",
+    "start:client": "node dist/client.js",
+    "dev:server": "ts-node src/server.ts",
+    "dev:client": "ts-node src/client.ts"
+  },
+  "keywords": [
+    "secure",
+    "messaging",
+    "e2ee",
+    "encryption",
+    "console",
+    "chat"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "crypto": "^1.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^18.15.11",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.0.4"
+  }
+}
