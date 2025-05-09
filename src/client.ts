@@ -50,12 +50,20 @@ class SecureMessagingClient {
 
   public async start(): Promise<void> {
     try {
-      // Get user information
-      this.username = await this.promptUser("Input Username: ");
-      const ipAddress = await this.promptUser("Input IP Address: ");
+      const ipAddress = await this.promptUser("Input IP Address or Domain: ");
       const port = parseInt(await this.promptUser("Input Port: "), 10);
 
-      // Connect to the server
+      const isAvailable = await this.isServerAvailable(ipAddress, port);
+      if (!isAvailable) {
+        console.error("Server is not running at that address/port.");
+        this.rl.close();
+        process.exit(1);
+      }
+
+      console.log("Server is up! Proceeding...");
+      this.username = await this.promptUser("Input Username: ");
+
+      // Connect after everything is valid
       await this.connect(ipAddress, port);
     } catch (error) {
       console.error("Error starting client:", error);
@@ -364,8 +372,20 @@ class SecureMessagingClient {
     const hours = String(now.getHours()).padStart(2, "0");
     const minutes = String(now.getMinutes()).padStart(2, "0");
     const seconds = String(now.getSeconds()).padStart(2, "0");
+    const milliseconds = String(now.getMilliseconds()).padStart(3, "0");
 
-    return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+    return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}.${milliseconds}`;
+  }
+
+  private isServerAvailable(host: string, port: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      const tester = net.createConnection({ host, port }, () => {
+        tester.end();
+        resolve(true);
+      });
+
+      tester.on("error", () => resolve(false));
+    });
   }
 }
 
