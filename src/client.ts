@@ -5,7 +5,14 @@ import * as crypto from "crypto";
 import * as readline from "readline";
 
 interface Message {
-  type: "message" | "join" | "leave" | "publicKey" | "auth" | "authResult";
+  type:
+    | "message"
+    | "join"
+    | "leave"
+    | "publicKey"
+    | "auth"
+    | "authResult"
+    | "usernameResult";
   sender: string;
   content: string;
   iv?: string;
@@ -21,6 +28,9 @@ class SecureMessagingClient {
   private sharedSecret: Buffer | null = null;
   private buffer: string = "";
   private authenticated: boolean = false;
+  private reconnecting: boolean = false;
+  private serverAddress: string = "";
+  private serverPort: number = 0;
 
   constructor() {
     // Create readline interface for user input
@@ -50,10 +60,15 @@ class SecureMessagingClient {
 
   public async start(): Promise<void> {
     try {
-      const ipAddress = await this.promptUser("Input IP Address or Domain: ");
-      const port = parseInt(await this.promptUser("Input Port: "), 10);
+      this.serverAddress = await this.promptUser(
+        "Input IP Address or Domain: "
+      );
+      this.serverPort = parseInt(await this.promptUser("Input Port: "), 10);
 
-      const isAvailable = await this.isServerAvailable(ipAddress, port);
+      const isAvailable = await this.isServerAvailable(
+        this.serverAddress,
+        this.serverPort
+      );
       if (!isAvailable) {
         console.error("Server is not running at that address/port.");
         this.rl.close();
@@ -61,14 +76,25 @@ class SecureMessagingClient {
       }
 
       console.log("Server is up! Proceeding...");
-      this.username = await this.promptUser("Input Username: ");
-
-      // Connect after everything is valid
-      await this.connect(ipAddress, port);
+      await this.promptForUsername();
     } catch (error) {
       console.error("Error starting client:", error);
       this.rl.close();
       process.exit(1);
+    }
+  }
+
+  private async promptForUsername(
+    message: string = "Input Username: "
+  ): Promise<void> {
+    try {
+      this.username = await this.promptUser(message);
+
+      // Connect after username is provided
+      await this.connect(this.serverAddress, this.serverPort);
+    } catch (error) {
+      console.error("Error during username prompt:", error);
+      this.cleanupAndExit();
     }
   }
 
@@ -115,6 +141,10 @@ class SecureMessagingClient {
       // 2) Handle normal close
       this.socket.on("close", () => {
         console.log("Connection closed by server");
+        if (this.reconnecting) {
+          this.reconnecting = false;
+          return;
+        }
         this.cleanupAndExit();
       });
 
@@ -156,6 +186,37 @@ class SecureMessagingClient {
   }
 
   private handleMessage(message: Message): void {
+    // Handle username taken message
+    if (
+      message.type === "usernameResult" &&
+      message.content === "username_taken"
+    ) {
+      console.error(
+        "Username already taken. Please choose a different username."
+      );
+
+      // Set reconnecting flag to prevent exit on socket close
+      this.reconnecting = true;
+
+      // Close current connection and prompt for a new username
+      if (this.socket) {
+        this.socket.end();
+        this.socket = null;
+      }
+
+      // Reset state for a clean reconnection
+      this.sharedSecret = null;
+      this.authenticated = false;
+      this.buffer = "";
+
+      // Ask for a new username
+      setTimeout(() => {
+        this.promptForUsername("Please choose a different username: ");
+      }, 1000);
+
+      return;
+    }
+
     if (message.type === "publicKey" && message.sender === "Server") {
       // Received the encrypted AES key from server
       this.handleKeyExchange(message.content);
