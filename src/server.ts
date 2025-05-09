@@ -52,32 +52,35 @@ class SecureMessagingServer {
     this.server = net.createServer(this.handleConnection.bind(this));
   }
 
-  public async start(): Promise<void> {
-    // Ask if password protection is desired
+  public async start(passwordFromArgs?: string): Promise<void> {
     const rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,
     });
 
-    const enablePassword = await this.prompt(
-      rl,
-      "Enable password protection? (y/n): "
-    );
-
-    if (enablePassword.toLowerCase() === "y") {
-      this.serverPassword = await this.prompt(rl, "Set server password: ");
-      console.log("Password protection enabled");
+    if (passwordFromArgs !== undefined) {
+      if (passwordFromArgs.trim() === "") {
+        this.serverPassword = null;
+      } else {
+        this.serverPassword = passwordFromArgs.trim();
+      }
     } else {
-      console.log("Password protection disabled");
+      const input = await this.prompt(
+        rl,
+        "Set server password (leave blank for none): "
+      );
+      this.serverPassword = input === "" ? null : input;
     }
 
     rl.close();
 
     this.server.listen(this.port, () => {
-      console.log(`Secure messaging server started on port ${this.port}`);
-      if (this.serverPassword) {
-        console.log("Password protection is enabled");
-      }
+      const status = this.serverPassword
+        ? "with password protection"
+        : "without password";
+      console.log(
+        `Secure messaging server started on port ${this.port} ${status}`
+      );
     });
   }
 
@@ -369,9 +372,97 @@ class SecureMessagingServer {
   }
 }
 
+async function isPortInUse(port: number): Promise<boolean> {
+  if (port < 1024 && process.getuid && process.getuid() !== 0) {
+    throw new Error(
+      `Port ${port} is a privileged port. Use a port >= 1024 or run as root.`
+    );
+  }
+
+  return new Promise((resolve) => {
+    const tester = net
+      .createServer()
+      .once("error", (err: any) => {
+        if (err.code === "EADDRINUSE") {
+          resolve(true); // Port in use
+        } else {
+          resolve(false); // Some other error
+        }
+      })
+      .once("listening", () => {
+        tester.close();
+        resolve(false); // Port is available
+      })
+      .listen(port);
+  });
+}
+
 // Start the server when running this file directly
 if (require.main === module) {
-  const port = process.env.PORT ? parseInt(process.env.PORT) : 25525;
-  const server = new SecureMessagingServer(port);
-  server.start();
+  (async () => {
+    const args = process.argv.slice(2);
+    let port: number | undefined;
+    let password: string | undefined;
+    let interactive = true;
+
+    for (let i = 0; i < args.length; i++) {
+      if ((args[i] === "--port" || args[i] === "-p") && args[i + 1]) {
+        port = parseInt(args[i + 1]);
+        interactive = false;
+        i++;
+      } else if (
+        (args[i] === "--password" || args[i] === "-w") &&
+        args[i + 1]
+      ) {
+        password = args[i + 1];
+        i++;
+      }
+    }
+
+    if (!interactive) {
+      const inUse = await isPortInUse(port ?? 25525);
+      if (inUse) {
+        console.error(
+          `❌ Port ${port} is already in use. Please choose another port.`
+        );
+        process.exit(1);
+      }
+    }
+
+    if (interactive) {
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
+
+      while (true) {
+        const input = await new Promise<string>((resolve) =>
+          rl.question("Set server port (default 25525): ", resolve)
+        );
+
+        const p = input.trim() === "" ? 25525 : parseInt(input.trim());
+        if (isNaN(p)) {
+          console.log("Invalid port. Please enter a number.");
+          continue;
+        }
+
+        try {
+          const inUse = await isPortInUse(p);
+          if (inUse) {
+            console.log(`Port ${p} is already in use. Try another one.`);
+            continue;
+          }
+          port = p;
+          break;
+        } catch (err: any) {
+          console.log(`❌ ${err.message}`);
+        }
+      }
+
+      rl.close();
+    }
+
+    const server = new SecureMessagingServer(port ?? 25525);
+    await server.start(password);
+  })();
 }
