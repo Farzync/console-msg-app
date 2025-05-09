@@ -15,7 +15,14 @@ interface Client {
 }
 
 interface Message {
-  type: "message" | "join" | "leave" | "publicKey" | "auth" | "authResult";
+  type:
+    | "message"
+    | "join"
+    | "leave"
+    | "publicKey"
+    | "auth"
+    | "authResult"
+    | "usernameResult";
   sender: string;
   content: string;
   iv?: string;
@@ -114,6 +121,13 @@ class SecureMessagingServer {
 
           // Handle first message which should contain username and public key
           if (message.type === "publicKey" && !client) {
+            // Check if username is already taken
+            if (this.isUsernameTaken(message.sender)) {
+              // Send username taken message
+              this.sendUsernameTakenMessage(socket);
+              return;
+            }
+
             client = {
               socket,
               username: message.sender,
@@ -219,6 +233,28 @@ class SecureMessagingServer {
         this.handleClientDisconnect(client);
       }
     });
+  }
+
+  // Check if a username is already taken
+  private isUsernameTaken(username: string): boolean {
+    return this.clients.has(username);
+  }
+
+  // Send username taken message to client
+  private sendUsernameTakenMessage(socket: net.Socket): void {
+    const msg: Message = {
+      type: "usernameResult",
+      sender: "Server",
+      content: "username_taken",
+      timestamp: this.getTimestamp(),
+    };
+
+    socket.write(JSON.stringify(msg) + "\n");
+
+    // Give client time to process message before closing
+    setTimeout(() => {
+      socket.end();
+    }, 1000);
   }
 
   private requestAuthentication(client: Client): void {
@@ -423,7 +459,7 @@ if (require.main === module) {
       const inUse = await isPortInUse(port ?? 25525);
       if (inUse) {
         console.error(
-          `❌ Port ${port} is already in use. Please choose another port.`
+          `Port ${port} is already in use. Please choose another port.`
         );
         process.exit(1);
       }
@@ -455,7 +491,7 @@ if (require.main === module) {
           port = p;
           break;
         } catch (err: any) {
-          console.log(`❌ ${err.message}`);
+          console.log(`${err.message}`);
         }
       }
 
