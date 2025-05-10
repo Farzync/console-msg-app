@@ -361,7 +361,7 @@ export class SecureMessagingServer {
     if (client.authenticated) {
       this.broadcastMessage({
         type: "leave",
-        sender: "Server",
+        sender: "SERVER",
         content: `${client.username} has left the chat`,
         timestamp: this.getTimestamp(),
       });
