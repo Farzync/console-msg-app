@@ -5,9 +5,9 @@
   "main": "dist/server.js",
   "scripts": {
     "build": "tsc",
-    "start:server": "node dist/server.js",
+    "start:server": "node dist/server/index.js",
     "start:client": "node dist/client.js",
-    "dev:server": "ts-node src/server.ts",
+    "dev:server": "ts-node src/server/index.ts",
     "dev:client": "ts-node src/client.ts"
   },
   "keywords": [
