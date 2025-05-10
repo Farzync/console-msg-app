@@ -113,26 +113,39 @@ This application implements a two-layer encryption protocol:
 
 ```
 secure-messaging-app/
-├── src/
-│   ├── client/
-│   │   ├── encryption/
-│   │   ├── ui/
-│   │   └── index.ts
-│   ├── server/
-│   │   ├── encryption/
-│   │   ├── handlers/
-│   │   └── index.ts
-│   ├── shared/
-│   │   ├── types/
-│   │   └── utils/
-│   └── build/
-│       ├── client.js
-│       └── server.js
-├── dist/
-├── build/
-├── package.json
-├── tsconfig.json
-└── README.md
+│   .gitignore
+│   LICENSE
+│   package-lock.json
+│   package.json
+│   README.md
+│   tsconfig.json
+│
+└───src
+    ├───build
+    │       client.js
+    │       server.js
+    │
+    ├───client
+    │   │   index.ts
+    │   │   messagingClient.ts
+    │   │   types.ts
+    │   │
+    │   └───utils
+    │           connection.ts
+    │           encryption.ts
+    │           prompt.ts
+    │           timestamp.ts
+    │
+    └───server
+        │   index.ts
+        │   messagingServer.ts
+        │   types.ts
+        │
+        └───utils
+                encryption.ts
+                port.ts
+                prompt.ts
+                timestamp.ts
 ```
 
 ## 📜 License
