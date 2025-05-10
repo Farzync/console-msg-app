@@ -4,24 +4,24 @@
   "description": "Secure console messaging application with end-to-end encryption",
   "main": "dist/server.js",
   "scripts": {
-    "build": "node ./src/build/server.js && node ./src/build/client.js",
-    "start:server": "node build/server/index.js",
-    "start:client": "node build/client.js",
     "dev:server": "ts-node src/server/index.ts",
-    "dev:client": "ts-node src/client.ts",
+    "dev:client": "ts-node src/client/index.ts",
     "build:server": "node ./src/build/server.js",
-    "build:exe:server:win": "pkg . --targets \"node16-win-x64\" --output build/server-win.exe",
-    "build:exe:server:linux": "pkg . --targets \"node16-linux-x64\" --output build/server-linux",
-    "build:exe:server": "npm run build:exe:server:win && npm run build:exe:server:linux",
     "build:client": "node ./src/build/client.js",
-    "build:exe:client:win": "pkg . --targets \"node16-win-x64\" --output build/client-win.exe",
-    "build:exe:client:linux": "pkg . --targets \"node16-linux-x64\" --output build/client-linux",
+    "build": "npm run build:server && npm run build:client",
+    "build:exe:server:win": "pkg dist/server.js --targets \"node16-win-x64\" --output build/server/server-win.exe",
+    "build:exe:server:linux": "pkg dist/server.js --targets \"node16-linux-x64\" --output build/server/server-linux",
+    "build:exe:server": "npm run build:exe:server:win && npm run build:exe:server:linux",
+    "build:exe:client:win": "pkg dist/client.js --targets \"node16-win-x64\" --output build/client/client-win.exe",
+    "build:exe:client:linux": "pkg dist/client.js --targets \"node16-linux-x64\" --output build/client/client-linux",
     "build:exe:client": "npm run build:exe:client:win && npm run build:exe:client:linux",
-    "build:exe": "npm run build:exe:server && npm run build:exe:client"
+    "build:all": "npm run build && npm run build:exe:server && npm run build:exe:client",
+    "start:server": "node dist/server.js",
+    "start:client": "node dist/client.js"
   },
   "bin": {
-    "server": "build/server.js",
-    "client": "build/client.js"
+    "server": "dist/server.js",
+    "client": "dist/client.js"
   },
   "keywords": [
     "secure",
