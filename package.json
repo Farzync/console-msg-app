@@ -1,7 +1,7 @@
 {
-  "name": "secure-messaging-app",
+  "name": "secure-console-messaging-app",
   "version": "1.0.0",
-  "description": "Secure console messaging application with end-to-end encryption",
+  "description": "🔐 A terminal-based chat app with end-to-end encryption. Made with paranoia and love by Faeza Raziq.",
   "main": "dist/server.js",
   "scripts": {
     "dev:server": "ts-node src/server/index.ts",
@@ -28,10 +28,22 @@
     "messaging",
     "e2ee",
     "encryption",
-    "console",
-    "chat"
+    "cli-chat",
+    "socket",
+    "aes-gcm",
+    "rsa",
+    "faeza",
+    "raziq",
+    "paranoia",
+    "love",
+    "terminal",
+    "chat",
+    "application",
+    "typescript",
+    "nodejs",
+    "pkg"
   ],
-  "author": "",
+  "author": "Faeza Raziq <faezaraziqg@gmail.com> (https://github.com/Farzync)",
   "license": "MIT",
   "dependencies": {
     "crypto": "^1.0.1"
