@@ -1,6 +1,6 @@
 export function getTimestamp(): string {
   const now = new Date();
-  return now.toLocaleString("id-ID", {
+  const timestamp = now.toLocaleString("id-ID", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -9,4 +9,7 @@ export function getTimestamp(): string {
     second: "2-digit",
     hour12: false,
   });
+
+  const milliseconds = String(now.getMilliseconds()).padStart(3, "0");
+  return `${timestamp}.${milliseconds}`;
 }
