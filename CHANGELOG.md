@@ -1,4 +1,4 @@
-# Changelog
+# Changelog (Template)
 
 All notable changes to the Secure Messaging App will be documented in this file.
 
@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Message history with local encryption
 - User presence indicators
 - Configuration options via command line arguments
-- Basic user commands (/help, /quit, /clear, etc.)
+- Basic user commands (/help, /leave, /clear, etc.)
 - Connection status indicators
 - Error handling and recovery mechanisms
 
