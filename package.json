@@ -5,23 +5,23 @@
   "main": "dist/server.js",
   "scripts": {
     "build": "node ./src/build/server.js && node ./src/build/client.js",
-    "start:server": "node dist/server/index.js",
-    "start:client": "node dist/client.js",
+    "start:server": "node build/server/index.js",
+    "start:client": "node build/client.js",
     "dev:server": "ts-node src/server/index.ts",
     "dev:client": "ts-node src/client.ts",
     "build:server": "node ./src/build/server.js",
-    "build:exe:server:win": "pkg . --targets \"node16-win-x64\" --output dist/server-win.exe",
-    "build:exe:server:linux": "pkg . --targets \"node16-linux-x64\" --output dist/server-linux",
+    "build:exe:server:win": "pkg . --targets \"node16-win-x64\" --output build/server-win.exe",
+    "build:exe:server:linux": "pkg . --targets \"node16-linux-x64\" --output build/server-linux",
     "build:exe:server": "npm run build:exe:server:win && npm run build:exe:server:linux",
     "build:client": "node ./src/build/client.js",
-    "build:exe:client:win": "pkg . --targets \"node16-win-x64\" --output dist/client-win.exe",
-    "build:exe:client:linux": "pkg . --targets \"node16-linux-x64\" --output dist/client-linux",
+    "build:exe:client:win": "pkg . --targets \"node16-win-x64\" --output build/client-win.exe",
+    "build:exe:client:linux": "pkg . --targets \"node16-linux-x64\" --output build/client-linux",
     "build:exe:client": "npm run build:exe:client:win && npm run build:exe:client:linux",
     "build:exe": "npm run build:exe:server && npm run build:exe:client"
   },
   "bin": {
-    "server": "dist/server.js",
-    "client": "dist/client.js"
+    "server": "build/server.js",
+    "client": "build/client.js"
   },
   "keywords": [
     "secure",
