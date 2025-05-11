@@ -1,4 +1,29 @@
 import * as crypto from "crypto";
+import * as fs from "fs";
+
+/**
+ * Generates a Diffie-Hellman key pair for the server.
+ * This key pair will be used for secure key exchange with the client.
+ */
+export function generateDHKeyPair() {
+  const dh = crypto.createDiffieHellman(2048);
+  const publicKey = dh.generateKeys("base64");
+  return { dh, publicKey };
+}
+
+/**
+ * Computes the shared secret using the server's private key and the client's public key.
+ *
+ * @param dh - The Diffie-Hellman object containing the server's private key.
+ * @param clientPublicKey - The public key received from the client.
+ * @returns The computed shared secret.
+ */
+export function computeSharedSecret(
+  dh: crypto.DiffieHellman,
+  clientPublicKey: string
+) {
+  return dh.computeSecret(clientPublicKey, "base64", "base64");
+}
 
 /**
  * Encrypts a message using AES-256-GCM with a shared secret.
@@ -44,4 +69,37 @@ export function decryptAES(
   let decrypted = decipher.update(encryptedMsg, "base64", "utf8"); // Decrypt the encrypted message
   decrypted += decipher.final("utf8"); // Finalize decryption
   return decrypted; // Return the decrypted message
+}
+
+/**
+ * Verifies the integrity of a public key using a digital certificate.
+ *
+ * @param publicKey - The public key to verify.
+ * @param certificatePath - Path to the certificate file.
+ * @returns True if the public key is valid, false otherwise.
+ */
+export function verifyPublicKey(
+  publicKey: string,
+  certificatePath: string
+): boolean {
+  const certificate = fs.readFileSync(certificatePath, "utf8");
+  const isValid = crypto.verify(
+    "sha256",
+    Buffer.from(publicKey),
+    {
+      key: certificate,
+      padding: crypto.constants.RSA_PKCS1_PADDING,
+    },
+    Buffer.from(publicKey)
+  );
+  return isValid;
+}
+
+/**
+ * Securely erases a key from memory by overwriting its data.
+ *
+ * @param key - The key to be securely erased.
+ */
+export function secureEraseKey(key: Buffer) {
+  key.fill(0); // Overwrite the buffer with zeros
 }

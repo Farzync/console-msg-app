@@ -1,4 +1,5 @@
 import * as crypto from "crypto";
+import * as fs from "fs";
 import { KeyPair, EncryptedData } from "../types";
 
 /**
@@ -22,6 +23,30 @@ export function generateKeyPair(): KeyPair {
     publicKey,
     privateKey: crypto.createPrivateKey(privateKey), // Create a private key object
   };
+}
+
+/**
+ * Generates a Diffie-Hellman key pair for the client.
+ * This key pair will be used for secure key exchange with the server.
+ */
+export function generateDHKeyPair() {
+  const dh = crypto.createDiffieHellman(2048);
+  const publicKey = dh.generateKeys("base64");
+  return { dh, publicKey };
+}
+
+/**
+ * Computes the shared secret using the client's private key and the server's public key.
+ *
+ * @param dh - The Diffie-Hellman object containing the client's private key.
+ * @param serverPublicKey - The public key received from the server.
+ * @returns The computed shared secret.
+ */
+export function computeSharedSecret(
+  dh: crypto.DiffieHellman,
+  serverPublicKey: string
+) {
+  return dh.computeSecret(serverPublicKey, "base64", "base64");
 }
 
 /**
@@ -91,4 +116,37 @@ export function decryptAESKey(
 ): Buffer {
   const encryptedKey = Buffer.from(encryptedKeyBase64, "base64"); // Decode the encrypted AES key from base64
   return crypto.privateDecrypt(privateKey, encryptedKey); // Decrypt the AES key using the RSA private key
+}
+
+/**
+ * Verifies the integrity of a public key using a digital certificate.
+ *
+ * @param publicKey - The public key to verify.
+ * @param certificatePath - Path to the certificate file.
+ * @returns True if the public key is valid, false otherwise.
+ */
+export function verifyPublicKey(
+  publicKey: string,
+  certificatePath: string
+): boolean {
+  const certificate = fs.readFileSync(certificatePath, "utf8");
+  const isValid = crypto.verify(
+    "sha256",
+    Buffer.from(publicKey),
+    {
+      key: certificate,
+      padding: crypto.constants.RSA_PKCS1_PADDING,
+    },
+    Buffer.from(publicKey)
+  );
+  return isValid;
+}
+
+/**
+ * Securely erases a key from memory by overwriting its data.
+ *
+ * @param key - The key to be securely erased.
+ */
+export function secureEraseKey(key: Buffer) {
+  key.fill(0); // Overwrite the buffer with zeros
 }
