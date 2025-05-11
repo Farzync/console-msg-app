@@ -1,0 +1,28 @@
+version: "3.8"
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: secure-chat-server
+    stdin_open: true
+    tty: true
+    networks:
+      - chatnet
+
+  client:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+    container_name: secure-chat-client
+    stdin_open: true
+    tty: true
+    depends_on:
+      - server
+    networks:
+      - chatnet
+
+networks:
+  chatnet:
+    driver: bridge
