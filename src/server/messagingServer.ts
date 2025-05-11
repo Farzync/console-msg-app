@@ -7,6 +7,19 @@ import { isPortInUse } from "./utils/port";
 import { askQuestion } from "./utils/prompt";
 import { decryptAES, encryptAES } from "./utils/encryption";
 import { getTimestamp } from "./utils/timestamp";
+import * as fs from "fs";
+
+// Rate limiting map to track login attempts
+const loginAttempts: Map<string, { count: number; lastAttempt: number }> =
+  new Map();
+const RATE_LIMIT_WINDOW = 60000; // 1 minute window
+const MAX_ATTEMPTS = 5;
+
+// Define a secure logging function
+function logError(message: string) {
+  const timestamp = new Date().toISOString();
+  fs.appendFileSync("server-errors.log", `[${timestamp}] ${message}\n`);
+}
 
 // Define the SecureMessagingServer class to handle all messaging logic
 export class SecureMessagingServer {
@@ -34,7 +47,32 @@ export class SecureMessagingServer {
       privateKey: crypto.createPrivateKey(privateKey), // Private key as KeyObject
     };
 
-    this.server = net.createServer(this.handleConnection.bind(this)); // Create a TCP server
+    this.server = net.createServer((socket) => {
+      const clientAddress = socket.remoteAddress || "unknown";
+
+      // Rate limiting logic
+      const now = Date.now();
+      const attemptData = loginAttempts.get(clientAddress) || {
+        count: 0,
+        lastAttempt: 0,
+      };
+
+      if (now - attemptData.lastAttempt < RATE_LIMIT_WINDOW) {
+        attemptData.count++;
+        if (attemptData.count > MAX_ATTEMPTS) {
+          socket.write("Too many login attempts. Please try again later.\n");
+          socket.destroy();
+          return;
+        }
+      } else {
+        attemptData.count = 1;
+      }
+
+      attemptData.lastAttempt = now;
+      loginAttempts.set(clientAddress, attemptData);
+
+      this.handleConnection(socket);
+    }); // Create a TCP server
   }
 
   // Start the server and optionally request a password for authentication
@@ -85,114 +123,130 @@ export class SecureMessagingServer {
     let client: Client | null = null; // Client object for each connected user
 
     socket.on("data", (data) => {
-      buffer += data.toString(); // Add new data to the buffer
+      try {
+        buffer += data.toString(); // Add new data to the buffer
 
-      let messageEndIndex: number;
-      // Process complete messages by checking for newline delimiter
-      while ((messageEndIndex = buffer.indexOf("\n")) !== -1) {
-        const rawMessage = buffer.substring(0, messageEndIndex); // Get the message up to the newline
-        buffer = buffer.substring(messageEndIndex + 1); // Keep remaining data in buffer
+        let messageEndIndex: number;
+        // Process complete messages by checking for newline delimiter
+        while ((messageEndIndex = buffer.indexOf("\n")) !== -1) {
+          const rawMessage = buffer.substring(0, messageEndIndex); // Get the message up to the newline
+          buffer = buffer.substring(messageEndIndex + 1); // Keep remaining data in buffer
 
-        try {
-          const message: Message = JSON.parse(rawMessage); // Parse the raw message
+          try {
+            const message: Message = JSON.parse(rawMessage); // Parse the raw message
 
-          // First message should contain username and public key
-          if (message.type === "publicKey" && !client) {
-            // Check if username is already taken
-            if (this.isUsernameTaken(message.sender)) {
-              this.sendUsernameTakenMessage(socket); // Notify the client if username is taken
-              return;
+            // First message should contain username and public key
+            if (message.type === "publicKey" && !client) {
+              // Check if username is already taken
+              if (this.isUsernameTaken(message.sender)) {
+                this.sendUsernameTakenMessage(socket); // Notify the client if username is taken
+                return;
+              }
+
+              // Create a new client object
+              client = {
+                socket,
+                username: message.sender,
+                publicKey: message.content,
+                authenticated: false, // Not authenticated yet
+              };
+
+              // Setup secure connection for the client (key exchange)
+              this.setupSecureConnection(client);
+
+              // Store client temporarily in the clients map
+              this.clients.set(message.sender, client);
+
+              // If password is required, ask for authentication
+              if (this.serverPassword) {
+                this.requestAuthentication(client); // Ask for password if needed
+              } else {
+                // No password required, authenticate automatically
+                client.authenticated = true;
+                this.confirmAuthentication(client, true); // Confirm successful authentication
+                this.announceClientJoined(client); // Announce client has joined the chat
+              }
             }
+            // Handle authentication message (for password verification)
+            else if (
+              message.type === "auth" &&
+              client &&
+              !client.authenticated
+            ) {
+              // Decrypt the password using the shared secret AES key
+              const password = decryptAES(
+                message.content,
+                message.iv || "",
+                message.authTag || "",
+                client.sharedSecret as Buffer
+              );
 
-            // Create a new client object
-            client = {
-              socket,
-              username: message.sender,
-              publicKey: message.content,
-              authenticated: false, // Not authenticated yet
-            };
+              // Check if password matches the server's password
+              const isAuthenticated = password === this.serverPassword;
+              client.authenticated = isAuthenticated;
 
-            // Setup secure connection for the client (key exchange)
-            this.setupSecureConnection(client);
+              // Send authentication result to client
+              this.confirmAuthentication(client, isAuthenticated);
 
-            // Store client temporarily in the clients map
-            this.clients.set(message.sender, client);
-
-            // If password is required, ask for authentication
-            if (this.serverPassword) {
-              this.requestAuthentication(client); // Ask for password if needed
-            } else {
-              // No password required, authenticate automatically
-              client.authenticated = true;
-              this.confirmAuthentication(client, true); // Confirm successful authentication
-              this.announceClientJoined(client); // Announce client has joined the chat
+              if (isAuthenticated) {
+                this.announceClientJoined(client); // Announce client if authenticated
+              } else {
+                // Disconnect client if authentication fails
+                setTimeout(() => {
+                  socket.end();
+                }, 1000); // Give time for the message to be sent before disconnecting
+              }
             }
-          }
-          // Handle authentication message (for password verification)
-          else if (message.type === "auth" && client && !client.authenticated) {
-            // Decrypt the password using the shared secret AES key
-            const password = decryptAES(
-              message.content,
-              message.iv || "",
-              message.authTag || "",
-              client.sharedSecret as Buffer
-            );
-
-            // Check if password matches the server's password
-            const isAuthenticated = password === this.serverPassword;
-            client.authenticated = isAuthenticated;
-
-            // Send authentication result to client
-            this.confirmAuthentication(client, isAuthenticated);
-
-            if (isAuthenticated) {
-              this.announceClientJoined(client); // Announce client if authenticated
-            } else {
-              // Disconnect client if authentication fails
-              setTimeout(() => {
+            // Handle regular messages
+            else if (
+              message.type === "message" &&
+              client &&
+              client.authenticated
+            ) {
+              if (message.content === "/leave") {
+                // Handle "/leave" command to disconnect client
+                this.handleClientDisconnect(client);
                 socket.end();
-              }, 1000); // Give time for the message to be sent before disconnecting
+                return;
+              }
+
+              // Decrypt the incoming message from the client
+              const decryptedContent = decryptAES(
+                message.content,
+                message.iv || "",
+                message.authTag || "",
+                client.sharedSecret as Buffer
+              );
+
+              // Create a broadcast message and send it to all clients
+              const broadcastMsg: Message = {
+                type: "message",
+                sender: message.sender,
+                content: decryptedContent,
+                timestamp: getTimestamp(),
+              };
+
+              this.broadcastMessage(broadcastMsg); // Send broadcast message
             }
+          } catch (error) {
+            const err = error as Error; // Explicitly cast error to Error
+            console.error(`[${getTimestamp()}] Error processing message:`, err); // Log error if message processing fails
           }
-          // Handle regular messages
-          else if (
-            message.type === "message" &&
-            client &&
-            client.authenticated
-          ) {
-            if (message.content === "/leave") {
-              // Handle "/leave" command to disconnect client
-              this.handleClientDisconnect(client);
-              socket.end();
-              return;
-            }
-
-            // Decrypt the incoming message from the client
-            const decryptedContent = decryptAES(
-              message.content,
-              message.iv || "",
-              message.authTag || "",
-              client.sharedSecret as Buffer
-            );
-
-            // Create a broadcast message and send it to all clients
-            const broadcastMsg: Message = {
-              type: "message",
-              sender: message.sender,
-              content: decryptedContent,
-              timestamp: getTimestamp(),
-            };
-
-            this.broadcastMessage(broadcastMsg); // Send broadcast message
-          }
-        } catch (error) {
-          console.error(`[${getTimestamp()}] Error processing message:`, error); // Log error if message processing fails
         }
+      } catch (error) {
+        const err = error as Error; // Explicitly cast error to Error
+        logError(
+          `Error processing data from ${socket.remoteAddress}: ${err.message}`
+        );
+        socket.write("Invalid data received. Connection will be terminated.\n");
+        socket.destroy();
       }
     });
 
     // Handle socket errors (e.g., client disconnect)
-    socket.on("error", (err) => {
+    socket.on("error", (error) => {
+      const err = error as Error; // Explicitly cast error to Error
+      logError(`Socket error from ${socket.remoteAddress}: ${err.message}`);
       console.error(
         `[${getTimestamp()}] Socket error from ${
           client?.username || "<unknown>"
