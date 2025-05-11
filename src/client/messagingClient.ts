@@ -173,6 +173,9 @@ export class SecureMessagingClient {
 
   // Handle incoming messages from the server
   private handleMessage(message: Message): void {
+    // Add a receipt timestamp (when the message was received)
+    const receivedTimestamp = getTimestamp(); // Timestamp when message was received
+
     // Handle username already taken error
     if (
       message.type === "usernameResult" &&
@@ -246,10 +249,10 @@ export class SecureMessagingClient {
           this.sharedSecret
         );
 
-        // Display the decrypted message
+        // Display the decrypted message with both timestamps
         clearCurrentLine(); // Clear the current line to avoid prompt conflict
         console.log(
-          `[${message.timestamp}] ${message.sender}: ${decryptedContent}`
+          `[Received: ${receivedTimestamp}] [Sent: ${message.timestamp}] ${message.sender}: ${decryptedContent}`
         );
 
         // Redisplay the prompt
@@ -266,7 +269,7 @@ export class SecureMessagingClient {
       // For system messages (join/leave), display the message directly
       clearCurrentLine();
       console.log(
-        `[${message.timestamp}] ${message.sender}: ${message.content}`
+        `[Received: ${receivedTimestamp}][Sent: ${message.timestamp}] ${message.sender}: ${message.content}`
       );
       if (this.authenticated) {
         displayMessagePrompt();
