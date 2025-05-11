@@ -13,12 +13,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enhanced logging with timestamps for all server events
 - Improved client-side message display format showing both timestamps
 - Fixed "double new connection" issue by improving connection handling logic
+- Global error handling for uncaught exceptions and unhandled promise rejections in client and server
+- Connection status tracking and logging in SecureMessagingClient (Connected, Disconnected, Connecting)
+- Validation for username and password prompts in the client
+- Refactored server configuration prompts into a separate utility function
+- Diffie-Hellman key pair generation and shared secret computation for client-server communication
+- Rate limiting for login attempts in SecureMessagingServer
 
 ### Fixed
 
 - Resolved connection processing duplication issue
 - Optimized memory usage in message handling
 - Enhanced error recovery mechanisms
+- Enhanced error logging in SecureMessagingServer
 
 ## [1.0.0] - 2025-05-10
 
