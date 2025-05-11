@@ -76,8 +76,9 @@ export class SecureMessagingServer {
 
   // Handle incoming connections from clients
   private handleConnection(socket: net.Socket): void {
+    const connectionTimestamp = getTimestamp(); // Timestamp when connection was accepted
     console.log(
-      `New connection from ${socket.remoteAddress}:${socket.remotePort}`
+      `[${connectionTimestamp}] New connection from ${socket.remoteAddress}:${socket.remotePort}`
     );
 
     let buffer = ""; // Buffer to store incoming data
@@ -185,20 +186,19 @@ export class SecureMessagingServer {
             this.broadcastMessage(broadcastMsg); // Send broadcast message
           }
         } catch (error) {
-          console.error("Error processing message:", error); // Log error if message processing fails
+          console.error(`[${getTimestamp()}] Error processing message:`, error); // Log error if message processing fails
         }
       }
     });
 
     // Handle socket errors (e.g., client disconnect)
     socket.on("error", (err) => {
-      if ((err as NodeJS.ErrnoException).code === "ECONNRESET") {
-        console.warn(
-          `Client ${client?.username || "<unknown>"} disconnected abruptly.`
-        );
-      } else {
-        console.error("Socket error:", err);
-      }
+      console.error(
+        `[${getTimestamp()}] Socket error from ${
+          client?.username || "<unknown>"
+        }:`,
+        err
+      );
 
       if (client) {
         this.handleClientDisconnect(client); // Handle client disconnection
@@ -207,6 +207,12 @@ export class SecureMessagingServer {
 
     // Handle socket close event
     socket.on("close", () => {
+      console.log(
+        `[${getTimestamp()}] Connection closed from ${
+          client?.username || "<unknown>"
+        }`
+      );
+
       if (client) {
         this.handleClientDisconnect(client); // Handle client disconnection when socket closes
       }
@@ -263,7 +269,7 @@ export class SecureMessagingServer {
 
   // Announce that a client has successfully joined the chat
   private announceClientJoined(client: Client): void {
-    console.log(`${client.username} has joined the chat`);
+    console.log(`[${getTimestamp()}] ${client.username} has joined the chat`);
 
     this.broadcastMessage({
       type: "join",
