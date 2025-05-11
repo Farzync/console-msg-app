@@ -29,6 +29,7 @@ export class SecureMessagingClient {
   private reconnecting: boolean = false; // Flag for reconnecting the client after failure
   private serverAddress: string = ""; // Server IP address or domain
   private serverPort: number = 0; // Server port number
+  private connectionStatus: string = "Disconnected"; // Tracks the connection status
 
   constructor() {
     // Create readline interface for user input
@@ -38,9 +39,15 @@ export class SecureMessagingClient {
     this.keyPair = generateKeyPair();
   }
 
+  private updateConnectionStatus(status: string): void {
+    this.connectionStatus = status;
+    console.log(`Connection Status: ${status}`);
+  }
+
   // Start the client and initiate connection to the server
   public async start(): Promise<void> {
     try {
+      this.updateConnectionStatus("Connecting");
       // Prompt user for server address and port
       this.serverAddress = await promptUser(
         this.rl,
@@ -49,20 +56,18 @@ export class SecureMessagingClient {
       this.serverPort = parseInt(await promptUser(this.rl, "Input Port: "), 10);
 
       // Check if the server is available at the provided address and port
-      const isAvailable = await isServerAvailable(
-        this.serverAddress,
-        this.serverPort
-      );
-      if (!isAvailable) {
-        console.error("Server is not running at that address/port.");
-        this.cleanupAndExit();
-        return;
+      if (!(await isServerAvailable(this.serverAddress, this.serverPort))) {
+        this.updateConnectionStatus("Disconnected");
+        throw new Error(
+          "Unable to connect to the server. Please check the IP address and port, and ensure the server is running."
+        );
       }
 
       console.log("Server is up! Proceeding...");
       await this.promptForUsername(); // Prompt for username after server availability
     } catch (error) {
       console.error("Error starting client:", error);
+      this.updateConnectionStatus("Disconnected");
       this.cleanupAndExit();
     }
   }
@@ -127,12 +132,14 @@ export class SecureMessagingClient {
         } else {
           console.error("Connection error:", err);
         }
+        this.updateConnectionStatus("Disconnected");
         this.cleanupAndExit();
       };
 
       // Handle connection closure
       const handleClose = () => {
         console.log("Connection closed by server");
+        this.updateConnectionStatus("Disconnected");
         if (this.reconnecting) {
           this.reconnecting = false;
           return;
@@ -146,6 +153,7 @@ export class SecureMessagingClient {
         port,
         () => {
           console.log(`Connected to ${ipAddress}:${port}`);
+          this.updateConnectionStatus("Connected");
           // Send username and public key to the server
           this.sendPublicKey();
           resolve();

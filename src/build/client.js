@@ -1,6 +1,17 @@
 // Import the build function from the esbuild module
 const { build } = require("esbuild");
 
+// Added global error handling for unexpected errors
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught Exception:", err);
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("Unhandled Rejection at:", promise, "reason:", reason);
+  process.exit(1);
+});
+
 // Run the bundling process with the following configuration:
 build({
   // Main entry point for the client, usually where the main logic starts

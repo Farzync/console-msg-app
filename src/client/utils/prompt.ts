@@ -31,6 +31,42 @@ export function promptUser(
 }
 
 /**
+ * Prompts the user for a username with validation using readline.
+ * Ensures the username is alphanumeric and between 3-20 characters.
+ * @returns A Promise that resolves with a valid username
+ */
+export async function promptForUsername(): Promise<string> {
+  const rl = createReadlineInterface();
+  const username = await promptUser(rl, "Enter your username: ");
+  rl.close();
+
+  if (!/^[a-zA-Z0-9]{3,20}$/.test(username)) {
+    throw new Error(
+      "Username must be alphanumeric and between 3-20 characters."
+    );
+  }
+
+  return username;
+}
+
+/**
+ * Prompts the user for a password with validation using readline.
+ * Ensures the password is at least 6 characters long.
+ * @returns A Promise that resolves with a valid password
+ */
+export async function promptForPassword(): Promise<string> {
+  const rl = createReadlineInterface();
+  const password = await promptUser(rl, "Enter your password: ");
+  rl.close();
+
+  if (password.length < 6) {
+    throw new Error("Password must be at least 6 characters long.");
+  }
+
+  return password;
+}
+
+/**
  * Sets up a handler for each line of input entered by the user.
  * Whenever the user enters a line, the handler function is invoked.
  *

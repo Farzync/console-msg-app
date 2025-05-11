@@ -1,6 +1,17 @@
 // src/client/index.ts
 import { SecureMessagingClient } from "./messagingClient";
 
+// Added global error handling for unexpected errors
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught Exception:", err);
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("Unhandled Rejection at:", promise, "reason:", reason);
+  process.exit(1);
+});
+
 // Start the client when this file is run directly (not imported as a module)
 if (require.main === module) {
   // Create a new instance of the SecureMessagingClient
